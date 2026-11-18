@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>撲克建築師 - 雙人對戰與抽卡主控台</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        pastelBg: '#F9F8F3',     // 淺充塞溫暖底色
+                        pastelCard: '#FFFFFF',   // 卡片純白
+                        ecoGreen: '#10B981',     // 高飽和綠色 (亮眼點綴)
+                        ecoDark: '#047857',      // 深綠色
+                        p1Color: '#FF6B8B',      // 玩家1粉紅
+                        p2Color: '#3B82F6'       // 玩家2藍色
+                    },
+                    boxShadow: {
+                        'fun': '0 6px 0 0 #1E293B',
+                        'fun-sm': '0 3px 0 0 #1E293B',
+                        'eco': '0 6px 0 0 #047857',
+                        'card': '0 15px 35px -5px rgba(0, 0, 0, 0.08)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Noto+Sans+TC:wght@500;700;900&display=swap');
+        
+        body {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            background-color: #F9F8F3;
+            color: #1E293B;
+            background-image: 
+                radial-gradient(#10B981 1.2px, transparent 1.2px), 
+                radial-gradient(#F59E0B 1.2px, #F9F8F3 1.2px);
+            background-size: 48px 48px;
+            background-position: 0 0, 24px 24px;
+        }
+
+        /* 3D 翻牌特效 */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+        .transform-style-3d {
+            transform-style: preserve-3d;
+            transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .backface-hidden {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
+
+        /* 建築小圖案漂浮動畫 */
+        @keyframes float-building {
+            0%, 100% { transform: translateY(0) rotate(-2deg); }
+            50% { transform: translateY(-5px) rotate(2deg); }
+        }
+        .animate-float {
+            animation: float-building 4s infinite ease-in-out;
+        }
+
+        /* 點擊彈跳回饋 */
+        .interactive-pop:active {
+            transform: scale(0.96);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-ecoGreen selection:text-white p-3 sm:p-5">
+
+    <!-- 頂部標題區：融入建築主題圖案與活潑綠色點綴 -->
+    <header class="w-full max-w-5xl mx-auto text-center my-2 sm:my-4">
+        <div class="inline-block bg-white border-4 border-slate-900 rounded-3xl px-6 py-3 shadow-fun transform -rotate-1 animate-float">
+            <div class="flex items-center justify-center gap-2 sm:gap-3">
+                <span class="text-3xl">🏗️</span>
+                <span class="text-2xl">🏢</span>
+                <h1 class="text-2xl sm:text-3xl font-black tracking-wider text-slate-900">撲克建築師</h1>
+                <span class="text-2xl">🏡</span>
+                <span class="text-3xl">📐</span>
+            </div>
+        </div>
+        <div class="mt-3">
+            <span class="text-xs sm:text-sm font-black text-ecoDark bg-emerald-100 border-2 border-slate-900 rounded-xl py-1.5 px-5 inline-block shadow-fun-sm">
+                🌱 綠建築土地開發對戰 ｜ 9宮格配置與機會命運工具 🌿
+            </span>
+        </div>
+    </header>
+
+    <!-- 主遊戲對戰區 (左右分屏) -->
+    <main class="w-full max-w-6xl mx-auto flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 my-2">
+
+        <!-- ================= 玩家 1 區域 ================= -->
+        <div class="bg-white border-4 border-slate-900 rounded-3xl p-4 sm:p-5 shadow-fun flex flex-col justify-between relative overflow-hidden">
+            <!-- 裝飾用建築背景浮水印 -->
+            <div class="absolute -right-4 -bottom-4 text-8xl opacity-5 pointer-events-none">🏠</div>
+
+            <div>
+                <!-- 玩家標題與計分板 -->
+                <div class="flex items-center justify-between bg-rose-50 border-3 border-slate-900 rounded-2xl p-3 mb-4">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-10 h-10 bg-rose-200 border-2 border-slate-900 rounded-xl flex items-center justify-center text-xl shadow-sm">
+                            👩‍🎨
+                        </div>
+                        <div>
+                            <h2 class="font-black text-base sm:text-lg text-slate-900">玩家 1 建築基地</h2>
+                            <p class="text-[11px] font-bold text-slate-500">手牌建議維持 6 張</p>
+                        </div>
+                    </div>
+                    <div class="bg-white border-2 border-slate-900 px-3.5 py-1.5 rounded-xl shadow-sm text-center">
+                        <div class="text-[10px] font-black text-slate-400">總土地面積</div>
+                        <div id="p1Score" class="text-xl font-black text-rose-500">0 <span class="text-xs font-bold">m²</span></div>
+                    </div>
+                </div>
+
+                <!-- 9 宮格地圖 -->
+                <div class="text-xs font-black text-slate-600 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-1">🧱 9 宮格土地配置 <span class="text-ecoGreen font-bold">(上限100m²)</span></span>
+                    <span class="text-slate-400">點擊格子填入數字</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2.5 mb-4" id="p1Grid">
+                    <!-- 動態生成 9 格 -->
+                </div>
+            </div>
+
+            <div class="bg-emerald-50/80 border-2 border-emerald-200 rounded-2xl p-3 text-xs text-slate-700 font-bold flex items-center gap-2">
+                <span class="text-base">💡</span>
+                <span>第 3 回合起可選兩塊土地進行「相加/相乘」，滿 9 格可佔領對手土地！</span>
+            </div>
+        </div>
+
+        <!-- ================= 玩家 2 區域 ================= -->
+        <div class="bg-white border-4 border-slate-900 rounded-3xl p-4 sm:p-5 shadow-fun flex flex-col justify-between relative overflow-hidden">
+            <!-- 裝飾用建築背景浮水印 -->
+            <div class="absolute -right-4 -bottom-4 text-8xl opacity-5 pointer-events-none">🏢</div>
+
+            <div>
+                <!-- 玩家標題與計分板 -->
+                <div class="flex items-center justify-between bg-blue-50 border-3 border-slate-900 rounded-2xl p-3 mb-4">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-10 h-10 bg-blue-200 border-2 border-slate-900 rounded-xl flex items-center justify-center text-xl shadow-sm">
+                            👨‍💻
+                        </div>
+                        <div>
+                            <h2 class="font-black text-base sm:text-lg text-slate-900">玩家 2 建築基地</h2>
+                            <p class="text-[11px] font-bold text-slate-500">手牌建議維持 6 張</p>
+                        </div>
+                    </div>
+                    <div class="bg-white border-2 border-slate-900 px-3.5 py-1.5 rounded-xl shadow-sm text-center">
+                        <div class="text-[10px] font-black text-slate-400">總土地面積</div>
+                        <div id="p2Score" class="text-xl font-black text-blue-500">0 <span class="text-xs font-bold">m²</span></div>
+                    </div>
+                </div>
+
+                <!-- 9 宮格地圖 -->
+                <div class="text-xs font-black text-slate-600 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-1">🧱 9 宮格土地配置 <span class="text-ecoGreen font-bold">(上限100m²)</span></span>
+                    <span class="text-slate-400">點擊格子填入數字</span>
+                </div>
+                <div class="grid grid-cols-3 gap-2.5 mb-4" id="p2Grid">
+                    <!-- 動態生成 9 格 -->
+                </div>
+            </div>
+
+            <div class="bg-emerald-50/80 border-2 border-emerald-200 rounded-2xl p-3 text-xs text-slate-700 font-bold flex items-center gap-2">
+                <span class="text-base">💡</span>
+                <span>魔法牌 J 抽機會命運；Q 吸收對方土地；K 代表 100m²；鬼牌使對方歸零！</span>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ================= 機會與命運抽卡工具區 ================= -->
+    <section class="w-full max-w-5xl mx-auto bg-emerald-50/70 border-4 border-slate-900 rounded-3xl p-4 sm:p-6 shadow-fun my-4">
+        <div class="text-center mb-4">
+            <span class="bg-ecoGreen text-white border-2 border-slate-900 px-5 py-1.5 rounded-full text-xs sm:text-sm font-black shadow-fun-sm inline-block transform hover:scale-105 transition-transform">
+                ✨ 打出魔法牌 J 時，點擊下方卡片抽取機會與命運事件！ ✨
+            </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            
+            <!-- 3D 抽卡牌堆 -->
+            <div class="w-full h-72 perspective-1000 cursor-pointer select-none interactive-pop" id="cardContainer" onclick="drawCard()">
+                <div id="cardElement" class="relative w-full h-full transform-style-3d rounded-3xl">
+                    
+                    <!-- 卡片背面 -->
+                    <div class="absolute inset-0 w-full h-full bg-emerald-600 border-4 border-slate-900 rounded-3xl flex flex-col items-center justify-center p-6 text-white shadow-card backface-hidden bg-gradient-to-br from-emerald-500 to-emerald-700">
+                        <div class="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-inner animate-bounce">
+                            <span class="text-4xl">🎟️</span>
+                        </div>
+                        <h3 class="text-2xl font-black tracking-wide mb-1 text-yellow-200">抽取機會與命運</h3>
+                        <p class="text-xs sm:text-sm font-bold bg-white/25 text-white px-4 py-2 rounded-2xl border-2 border-white/50 mt-2">
+                            👇 點擊此處翻開建築事件！
+                        </p>
+                    </div>
+
+                    <!-- 卡片正面 -->
+                    <div class="absolute inset-0 w-full h-full bg-white border-4 border-slate-900 rounded-3xl flex flex-col justify-between p-5 text-slate-900 shadow-card rotate-y-180 backface-hidden overflow-y-auto">
+                        <div class="flex justify-between items-center border-b-3 border-slate-100 pb-2">
+                            <span id="cardCategory" class="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-xl bg-ecoGreen text-white border-2 border-slate-900 shadow-sm">
+                                建築事件
+                            </span>
+                            <span id="cardIndex" class="text-xs font-black text-slate-400">#01</span>
+                        </div>
+
+                        <div class="my-auto text-center py-1">
+                            <div id="cardIcon" class="text-5xl mb-2">🏛️</div>
+                            <h4 id="cardTitle" class="text-lg sm:text-xl font-black text-slate-900 mb-2 tracking-wide">
+                                政府徵收（道路拓寬）
+                            </h4>
+                            <p id="cardEffect" class="text-xs sm:text-sm text-slate-700 font-bold leading-relaxed bg-amber-50/80 p-3 rounded-2xl border-2 border-amber-200">
+                                道路拓寬工程，你的一塊土地被政府以公告現值強制徵收。指定自己的一塊土地直接歸零。
+                            </p>
+                        </div>
+
+                        <div class="text-center pt-2 border-t-2 border-slate-100">
+                            <span class="text-[11px] font-bold text-ecoDark">🔄 點擊卡片可再次抽取</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 抽卡歷史紀錄 -->
+            <div class="bg-white border-4 border-slate-900 rounded-3xl p-4 shadow-fun flex flex-col h-72">
+                <div class="flex items-center justify-between mb-2 border-b-2 border-slate-100 pb-2">
+                    <h5 class="font-black text-sm text-slate-800 flex items-center gap-2">
+                        <span>📜</span> 抽卡歷史紀錄
+                    </h5>
+                    <button onclick="clearHistory()" class="text-xs font-black text-rose-500 hover:text-rose-700 px-2.5 py-1 rounded-xl bg-rose-50 border-2 border-rose-200 transition-colors">
+                        清空
+                    </button>
+                </div>
+                <div id="historyList" class="space-y-2 flex-grow overflow-y-auto pr-1 text-xs">
+                    <p class="text-slate-400 text-center py-10 font-bold">還沒有抽取任何事件卡片 ✨</p>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- 頁尾 -->
+    <footer class="w-full text-center py-3 text-xs font-black text-slate-400 flex items-center justify-center gap-2">
+        <span>🏗️ 撲克建築師桌遊教具</span>
+        <span>•</span>
+        <span>專為小學生打造的 Vibe Coding 虛實整合工具 🌿</span>
+    </footer>
+
+    <!-- JavaScript 邏輯 -->
+    <script>
+        // 初始化 9 宮格資料 (玩家1 與 玩家2)
+        let p1Lands = new Array(9).fill(0);
+        let p2Lands = new Array(9).fill(0);
+
+        function initGrids() {
+            renderGrid('p1Grid', p1Lands, 'p1');
+            renderGrid('p2Grid', p2Lands, 'p2');
+            updateScores();
+        }
+
+        function renderGrid(containerId, landsArray, playerPrefix) {
+            const container = document.getElementById(containerId);
+            let html = '';
+            landsArray.forEach((val, idx) => {
+                html += `
+                    <div class="flex flex-col items-center justify-center bg-slate-50 border-3 border-slate-900 rounded-2xl p-2 shadow-sm hover:bg-emerald-50/50 transition-all">
+                        <span class="text-[10px] font-black text-slate-400 mb-1 flex items-center gap-1">
+                            <span>🏗️</span> #${idx + 1}
+                        </span>
+                        <div class="flex items-center gap-1 w-full justify-center">
+                            <input type="number" min="0" max="100" value="${val}" 
+                                   onchange="updateLand('${playerPrefix}', ${idx}, this.value)"
+                                   class="w-16 text-center font-black text-base sm:text-lg bg-white border-2 border-slate-900 rounded-xl py-1 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                            <span class="text-[11px] font-bold text-slate-600">m²</span>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function updateLand(player, index, value) {
+            let num = parseInt(value) || 0;
+            if (num > 100) num = 100; // 限制單格上限 100 平方公尺
+            if (num < 0) num = 0;
+
+            if (player === 'p1') {
+                p1Lands[index] = num;
+                updateScores();
+            } else if (player === 'p2') {
+                p2Lands[index] = num;
+                updateScores();
+            }
+        }
+
+        function updateScores() {
+            const p1Total = p1Lands.reduce((a, b) => a + b, 0);
+            const p2Total = p2Lands.reduce((a, b) => a + b, 0);
+
+            document.getElementById('p1Score').innerHTML = `${p1Total} <span class="text-xs font-bold">m²</span>`;
+            document.getElementById('p2Score').innerHTML = `${p2Total} <span class="text-xs font-bold">m²</span>`;
+        }
+
+        // 機會與命運卡牌資料庫 (10張)
+        const events = [
+            { title: "政府徵收（道路拓寬）", icon: "🛣️", category: "⚠️ 危機事件", effect: "道路拓寬工程！你的一塊土地被政府強制徵收，指定自己的一塊土地直接歸零。" },
+            { title: "遺產稅暴擊", icon: "💸", category: "💸 財務衝擊", effect: "遠親突然過世，繳納高額遺產稅！本回合獲得土地面積減半，或休息一回合吃下午茶。" },
+            { title: "調皮的小猴子亂入", icon: "🐒", category: "🐒 互動事件", effect: "小猴子把工地牌調亂了！對手可任意調換你和他的一塊土地位置。" },
+            { title: "快樂的假日派對", icon: "🧋", category: "🧋 休閒時光", effect: "舉辦工地慶功宴今天不趕工！跳過一次出牌機會（休息一回合喝下午茶）。" },
+            { title: "鄰居惡意檢舉（違章建築）", icon: "🚨", category: "🚨 罰則事件", effect: "被鄰居檢舉違建需進行行政訴訟！跳過一次出牌機會（停權一回合）。" },
+            { title: "容積率獎勵", icon: "🏢", category: "🌟 超棒獎勵", effect: "綠建築環評通過，成功獲得容積獎勵！指定自己任一格土地面積直接加倍。" },
+            { title: "土地重劃分紅", icon: "📈", category: "📈 利多加碼", effect: "市地重劃成功土地價值上漲！從公共區直接補一張 10 點土地牌到現有格子中。" },
+            { title: "幸運中樂透！", icon: "🎟️", category: "🎟️ 幸運發財", effect: "發票中大獎獲得意外之財！直接從手牌選一張牌加到任一塊土地上。" },
+            { title: "超級建築大師", icon: "🏆", category: "🏆 榮譽加冕", effect: "建築設計獲得全國大獎！指定自己任一塊土地的面積直接加倍。" },
+            { title: "建築加速狂飆", icon: "⚡", category: "⚡ 超車加速", effect: "工班喝了提神飲料進度超前！本回合你可以額外多出一次牌（一回合出兩次）。" }
+        ];
+
+        let isFlipped = false;
+        let history = [];
+
+        function drawCard() {
+            const randomIndex = Math.floor(Math.random() * events.length);
+            const card = events[randomIndex];
+
+            document.getElementById('cardTitle').innerText = card.title;
+            document.getElementById('cardIcon').innerText = card.icon;
+            document.getElementById('cardCategory').innerText = card.category;
+            document.getElementById('cardEffect').innerText = card.effect;
+            document.getElementById('cardIndex').innerText = `#${randomIndex + 1 < 10 ? '0' + (randomIndex + 1) : randomIndex + 1}`;
+
+            const cardElement = document.getElementById('cardElement');
+            if (!isFlipped) {
+                cardElement.classList.add('rotate-y-180');
+                isFlipped = true;
+            } else {
+                cardElement.classList.remove('rotate-y-180');
+                setTimeout(() => {
+                    cardElement.classList.add('rotate-y-180');
+                }, 100);
+            }
+
+            addToHistory(card.icon, card.title);
+        }
+
+        function addToHistory(icon, title) {
+            const now = new Date();
+            const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            history.unshift({ icon, title, time: timeString });
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const historyList = document.getElementById('historyList');
+            if (history.length === 0) {
+                historyList.innerHTML = `<p class="text-slate-400 text-center py-10 font-bold">還沒有抽取任何事件卡片 ✨</p>`;
+                return;
+            }
+
+            let html = '';
+            history.forEach((item) => {
+                html += `
+                    <div class="flex items-center justify-between p-2.5 bg-emerald-50/70 border-2 border-emerald-200 rounded-xl">
+                        <div class="flex items-center gap-2">
+                            <span class="text-base">${item.icon}</span>
+                            <span class="font-black text-slate-800">${item.title}</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-bold">${item.time}</span>
+                    </div>
+                `;
+            });
+            historyList.innerHTML = html;
+        }
+
+        function clearHistory() {
+            history = [];
+            renderHistory();
+        }
+
+        // 頁面載入時初始化
+        window.onload = function() {
+            initGrids();
+        };
+    </script>
+</body>
+</html>
